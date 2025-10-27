@@ -7,32 +7,49 @@ const zod_1 = require("zod");
 const jwt = require("jsonwebtoken");
 const JWT_SECRET = "SamikshyaNanda4";
 const users = [];
+const todos = [];
 const todoInputType = zod_1.z.object({
     title: zod_1.z.string(),
     description: zod_1.z.string()
 });
 exports.appRouter = (0, trpc_1.router)({
-    createTodo: trpc_1.publicProcedure
+    // Protected endpoint - requires JWT token
+    createTodo: trpc_1.protectedProcedure
         .input(todoInputType)
         .mutation(async (opts) => {
-        //everytime the clinet does a call you will see below hi there
-        console.log("Hi there");
+        const username = opts.ctx.username;
+        console.log(username, "username is here");
         const { title, description } = opts.input;
-        //Do db stuff here itself
-        return {
-            id: "1",
+        // Create new todo
+        const newTodo = {
+            id: String(Date.now()), // Simple ID generation
             title,
-            description
+            description,
+            createdBy: username
+        };
+        // Store in todos array
+        todos.push(newTodo);
+        return newTodo;
+    }),
+    // Get all todos - protected endpoint
+    getAllTodos: trpc_1.protectedProcedure
+        .mutation((opts) => {
+        const username = opts.ctx.username;
+        // Return only todos created by the logged-in user
+        const userTodos = todos.filter(todo => todo.createdBy === username);
+        return {
+            todos: userTodos,
+            count: userTodos.length
         };
     }),
+    // Sign up - creates new user and returns JWT token
     signUp: trpc_1.publicProcedure
         .input(zod_1.z.object({
-        email: zod_1.z.string(),
-        password: zod_1.z.string(),
+        email: zod_1.z.string().email(),
+        password: zod_1.z.string().min(6),
     }))
         .mutation((opts) => {
-        let email = opts.input.email;
-        let password = opts.input.password;
+        const { email, password } = opts.input;
         // Check if user already exists
         for (let i = 0; i < users.length; i++) {
             if (users[i]?.email === email) {
@@ -42,17 +59,56 @@ exports.appRouter = (0, trpc_1.router)({
         // Add new user
         users.push({ email, password });
         // Generate token
-        const token = jwt.sign({
-            email
-        }, JWT_SECRET);
+        const token = jwt.sign({ email }, JWT_SECRET);
         return {
             token,
-            success: true
+            message: "User created successfully"
+        };
+    }),
+    // Sign in - validates credentials and returns JWT token
+    signIn: trpc_1.publicProcedure
+        .input(zod_1.z.object({
+        email: zod_1.z.string().email(),
+        password: zod_1.z.string(),
+    }))
+        .mutation((opts) => {
+        const { email, password } = opts.input;
+        // Find user
+        const user = users.find(u => u.email === email);
+        if (!user || user.password !== password) {
+            throw new Error("Invalid email or password");
+        }
+        // Generate token
+        const token = jwt.sign({ email }, JWT_SECRET);
+        return {
+            token,
+            message: "Signed in successfully"
         };
     })
 });
 const server = (0, standalone_1.createHTTPServer)({
-    router: exports.appRouter
+    router: exports.appRouter,
+    createContext(opts) {
+        const authHeader = opts?.req?.headers["authorization"];
+        const token = typeof authHeader === "string" ? authHeader : authHeader?.[0];
+        if (!token) {
+            return {};
+        }
+        try {
+            const verifiedUser = jwt.verify(token, JWT_SECRET);
+            console.log(verifiedUser, "verified user is here");
+            if (typeof verifiedUser === "object" && verifiedUser !== null && "email" in verifiedUser) {
+                return {
+                    username: verifiedUser.email
+                };
+            }
+            return {};
+        }
+        catch (error) {
+            console.log("Invalid token");
+            return {};
+        }
+    }
 });
 server.listen(3000);
 //# sourceMappingURL=index.js.map
