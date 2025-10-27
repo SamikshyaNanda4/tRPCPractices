@@ -9,9 +9,9 @@ const trpc = (0, client_1.createTRPCProxyClient)({
     ]
 });
 async function createMyTodo() {
-    let response = await trpc.createTodo.mutate({
-        title: "GO to gym",
-        description: "Hello YOu have to fulfill the necessary food requirement and go to the gym"
+    let response = await trpc.signUp.mutate({
+        email: "samikshya.nanda.4848@gmail.com",
+        password: "HelloWorld"
     });
     console.log(response);
 }
